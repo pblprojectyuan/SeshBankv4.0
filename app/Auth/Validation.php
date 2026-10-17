@@ -14,12 +14,8 @@ final class Validation
     {
         $email = strtolower(trim(self::text($input, 'email')));
         $password = self::text($input, 'password');
-        $role = self::text($input, 'role');
         if (strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new \InvalidArgumentException('Enter a valid email address.');
-        }
-        if (!in_array($role, ['coach', 'client'], true)) {
-            throw new \InvalidArgumentException('Select a valid role.');
         }
         if ($password === '' || strlen($password) > 72 || strpos($password, "\0") !== false) {
             throw new \InvalidArgumentException('Enter a password of at most 72 bytes.');
@@ -37,6 +33,6 @@ final class Validation
                 throw new \InvalidArgumentException('Passwords do not match.');
             }
         }
-        return compact('name', 'email', 'password', 'role');
+        return compact('name', 'email', 'password');
     }
 }

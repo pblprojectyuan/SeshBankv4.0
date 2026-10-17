@@ -17,7 +17,7 @@ final class UserRepository
     public function findByEmail(string $email): ?array
     {
         $statement = $this->database->prepare(
-            'SELECT id, name, email, password_hash, role FROM users WHERE email = :email'
+            'SELECT id, name, email, password_hash FROM users WHERE email = :email'
         );
         $statement->execute(['email' => $email]);
         return $statement->fetch() ?: null;
@@ -25,17 +25,18 @@ final class UserRepository
 
     public function findById(int $id): ?array
     {
-        $statement = $this->database->prepare('SELECT id, name, email, role FROM users WHERE id = :id');
+        $statement = $this->database->prepare('SELECT id, name, email FROM users WHERE id = :id');
         $statement->execute(['id' => $id]);
         return $statement->fetch() ?: null;
     }
 
-    public function create(string $name, string $email, string $hash, string $role): int
+    public function create(string $name, string $email, string $hash): int
     {
+        // Satisfy the legacy NOT NULL enum without exposing roles in authentication.
         $statement = $this->database->prepare(
-            'INSERT INTO users (name, email, password_hash, role) VALUES (:name, :email, :hash, :role)'
+            "INSERT INTO users (name, email, password_hash, role) VALUES (:name, :email, :hash, 'client')"
         );
-        $statement->execute(['name' => $name, 'email' => $email, 'hash' => $hash, 'role' => $role]);
+        $statement->execute(['name' => $name, 'email' => $email, 'hash' => $hash]);
         return (int) $this->database->lastInsertId();
     }
 }

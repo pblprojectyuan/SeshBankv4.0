@@ -10,10 +10,14 @@ if (!$base || getenv('TEST_ALLOW_DATABASE_MUTATION') !== '1' || !extension_loade
     exit("Set TEST_BASE_URL and TEST_ALLOW_DATABASE_MUTATION=1; enable PHP cURL. Use a disposable database.\n");
 }
 $config = require dirname(__DIR__) . '/config/config.php';
+$testDatabase = getenv('TEST_DATABASE_NAME') ?: '';
+if (strpos($testDatabase, 'seshbank_test_') !== 0 || $config['database']['name'] !== $testDatabase) {
+    exit("Set TEST_DATABASE_NAME to a disposable seshbank_test_* database matching the server's DB_NAME.\n");
+}
 $database = Connection::open($config['database']);
 $tag = 'seshbank-test-' . bin2hex(random_bytes(8));
-$coachEmail = $tag . '-coach@example.com';
-$clientEmail = $tag . '-client@example.com';
+$newEmail = $tag . '-new@example.com';
+$legacyEmail = $tag . '-legacy@example.com';
 $password = bin2hex(random_bytes(12));
 $cookieFile = tempnam(sys_get_temp_dir(), 'seshbank-test-');
 $http = curl_init();
@@ -52,75 +56,131 @@ function cookieFrom(string $response): string
 
 try {
     [$status, $html] = request();
-    check($status === 200, 'Render homepage.');
+    check($status === 303 && strpos($html, 'Location: index.php?route=login') !== false,
+        'Root redirects to login without rendering a landing page.');
     check(stripos($html, 'HttpOnly') !== false && stripos($html, 'SameSite=Lax') !== false, 'Secure cookie flags.');
     check(stripos($html, 'Cache-Control: no-store') !== false, 'Disable authenticated page caching.');
     $oldCookie = cookieFrom($html);
-    $token = tokenFrom($html);
-    foreach (['coach', 'client'] as $dashboard) {
-        [$status, $html] = request($dashboard);
-        check($status === 303 && strpos($html, 'Location: index.php') !== false, 'Protect ' . $dashboard);
+    [$status, $html] = request('success&registered=1');
+    check($status === 303 && strpos($html, 'Registration successful') === false,
+        'An unauthenticated query cannot forge success.');
+    foreach (['home', 'auth', 'coach', 'client', 'unknown'] as $removed) {
+        check(request($removed)[0] === 404, 'Remove route ' . $removed);
     }
-    check(request('auth')[0] === 405 && request('logout')[0] === 405, 'Require POST.');
-    check(request('unknown')[0] === 404, 'Reject unknown routes.');
+    check(request('logout')[0] === 405 && request('success', [])[0] === 405, 'Enforce allowed methods.');
+    [$status, $html] = request('register');
+    check($status === 200 && strpos($html, '<h1>Register</h1>') !== false, 'Render registration page.');
+    check(strpos($html, 'name="role"') === false && strpos($html, '<script') === false,
+        'Registration needs no roles or JavaScript.');
+    $token = tokenFrom($html);
     $registration = [
-        'mode' => 'register', 'role' => 'coach', 'name' => '<script>Test Coach</script>',
-        'email' => $coachEmail, 'password' => $password, 'confirm_password' => $password,
+        'role' => 'coach', 'name' => '<script>Test User</script>',
+        'email' => $newEmail, 'password' => $password, 'confirm_password' => $password,
         'csrf_token' => $token,
     ];
-    check(request('auth', array_replace($registration, ['csrf_token' => 'bad']))[0] === 403, 'Reject invalid CSRF.');
-    check(request('auth', array_diff_key($registration, ['csrf_token' => true]))[0] === 403, 'Reject absent CSRF.');
-    check(request('auth', array_replace($registration, ['password' => ['bad']]))[0] === 422, 'Reject array input safely.');
-    [$status, $html] = request('auth', $registration);
-    check($status === 303 && strpos($html, 'Location: index.php?route=coach') !== false, 'Register coach.');
+    check(request('register', array_replace($registration, ['csrf_token' => 'bad']))[0] === 403, 'Reject invalid CSRF.');
+    check(request('register', array_diff_key($registration, ['csrf_token' => true]))[0] === 403, 'Reject absent CSRF.');
+    foreach (['password' => ['bad'], 'confirm_password' => 'different', 'name' => '', 'email' => 'invalid'] as $field => $value) {
+        [$status, $html] = request('register', array_replace($registration, [$field => $value]));
+        check($status === 422 && strpos($html, '<h1>Register</h1>') !== false,
+            'Render registration validation error for ' . $field);
+        check(strpos($html, $password) === false, 'Do not echo submitted passwords.');
+    }
+    check(request('success')[0] === 303, 'Failed registration never authenticates.');
+    $query = $database->prepare('SELECT COUNT(*) FROM users WHERE email = :email');
+    $query->execute(['email' => $newEmail]);
+    check((int) $query->fetchColumn() === 0, 'Invalid registration creates no account.');
+    [$status, $html] = request('register', $registration);
+    check($status === 303 && strpos($html, 'Location: index.php?route=success') !== false, 'Register account.');
     check(cookieFrom($html) !== $oldCookie, 'Rotate session ID on registration.');
-    [$status, $html] = request('coach');
-    check($status === 200 && strpos($html, '&lt;script&gt;Test Coach&lt;/script&gt;') !== false, 'Escape account name.');
-    check(request('client')[0] === 403, 'Reject coach access to client dashboard.');
+    [$status, $html] = request('success&registered=0&mode=login');
+    check($status === 200 && strpos($html, 'Registration successful') !== false,
+        'Registration confirmation comes from the authenticated session.');
+    check(strpos($html, '&lt;script&gt;Test User&lt;/script&gt;') !== false, 'Escape account name.');
+    check(strpos($html, $password) === false, 'Do not expose password on success.');
     $token = tokenFrom($html);
-    check(request('auth', array_replace($registration, ['email' => strtoupper($coachEmail),
-        'csrf_token' => $token]))[0] === 422, 'Handle normalized duplicate email.');
+    foreach (['', 'login', 'register'] as $route) {
+        [$status, $html] = request($route);
+        check($status === 303 && strpos($html, 'Location: index.php?route=success') !== false,
+            'Authenticated navigation redirects to success.');
+    }
 
-    $query = $database->prepare('SELECT password_hash FROM users WHERE email = :email');
-    $query->execute(['email' => $coachEmail]);
-    $storedHash = $query->fetchColumn();
+    $query = $database->prepare('SELECT password_hash, role FROM users WHERE email = :email');
+    $query->execute(['email' => $newEmail]);
+    $stored = $query->fetch();
+    $storedHash = $stored['password_hash'];
     check(is_string($storedHash) && $storedHash !== $password && password_verify($password, $storedHash),
         'Store only a verifiable hash in MySQL.');
+    check($stored['role'] === 'client', 'Use a fixed legacy schema value, ignoring submitted role.');
 
     check(request('logout', ['csrf_token' => 'bad'])[0] === 403, 'Reject logout CSRF.');
-    check(request('coach')[0] === 200, 'Invalid logout leaves authentication intact.');
-    check(request('logout', ['csrf_token' => $token])[0] === 303, 'Log out.');
-    check(request('coach')[0] === 303, 'Reject logged-out dashboard access.');
+    check(request('success')[0] === 200, 'Invalid logout leaves authentication intact.');
+    [$status, $html] = request('logout', ['csrf_token' => $token]);
+    check($status === 303 && strpos($html, 'Location: index.php?route=login') !== false, 'Logout redirects to login.');
+    check(strpos($html, '<html') === false, 'Logout renders no fourth page.');
+    check(request('success')[0] === 303, 'Reject logged-out success access.');
 
-    [, $html] = request();
+    [$status, $html] = request('login');
+    check($status === 200 && strpos($html, '<h1>Login</h1>') !== false, 'Render login page.');
+    $oldCookie = cookieFrom($html);
     $token = tokenFrom($html);
-    $login = ['mode' => 'login', 'role' => 'coach', 'email' => $coachEmail,
+    [$status, $html] = request('register', array_replace($registration, ['email' => strtoupper($newEmail),
+        'csrf_token' => $token]));
+    check($status === 422 && strpos($html, 'Unable to register this email.') !== false,
+        'Handle normalized duplicate email without exposing database errors.');
+    check(strpos($html, '&lt;script&gt;Test User&lt;/script&gt;') !== false, 'Escape redisplayed form input.');
+    check(request('success')[0] === 303, 'Duplicate registration does not authenticate.');
+    $login = ['email' => $newEmail,
         'password' => $password, 'csrf_token' => $token];
-    check(request('auth', array_replace($login, ['password' => 'wrong']))[0] === 422, 'Reject wrong password.');
-    check(request('auth', array_replace($login, ['role' => 'client']))[0] === 422, 'Reject wrong login role.');
-    check(request('auth', array_replace($login, ['email' => "' OR 1=1 --"]))[0] === 422, 'Reject injection email.');
-    [$status, $html] = request('auth', array_replace($login, ['email' => $tag . '-missing@example.com']));
-    check($status === 422 && strpos($html, 'Invalid email, password, or role.') !== false, 'Generic unknown-account error.');
-    check(request('auth', $login)[0] === 303, 'Log in with stored hash.');
-    [, $html] = request('coach');
+    [$status, $html] = request('login', array_replace($login, ['password' => 'wrong']));
+    check($status === 422 && strpos($html, 'Invalid email or password.') !== false, 'Reject wrong password.');
+    check(request('login', array_replace($login, ['email' => "' OR 1=1 --"]))[0] === 422, 'Reject injection email.');
+    [$status, $html] = request('login', array_replace($login, ['email' => $tag . '-missing@example.com']));
+    check($status === 422 && strpos($html, 'Invalid email or password.') !== false, 'Generic unknown-account error.');
+    check(request('success&registered=1')[0] === 303, 'Failed login cannot display success.');
+    [$status, $html] = request('login', $login);
+    check($status === 303 && strpos($html, 'Location: index.php?route=success') !== false, 'Log in with stored hash.');
+    $loginCookie = cookieFrom($html);
+    check($loginCookie !== $oldCookie, 'Rotate session ID on login.');
+    [, $html] = request('success&registered=1&mode=register');
+    check(strpos($html, 'Login successful') !== false && strpos($html, 'Registration successful') === false,
+        'Query parameters cannot change login confirmation.');
     $token = tokenFrom($html);
-    check(request('auth', array_replace($login, ['csrf_token' => $login['csrf_token']]))[0] === 403,
+    check(request('login', $login)[0] === 403,
         'Invalidate pre-login CSRF token.');
     request('logout', ['csrf_token' => $token]);
-    [, $html] = request();
-    $registration = array_replace($registration, ['role' => 'client', 'name' => 'Test Client',
-        'email' => $clientEmail, 'csrf_token' => tokenFrom($html)]);
-    check(request('auth', $registration)[0] === 303, 'Register client.');
-    [$status, $html] = request('client');
-    check($status === 200 && strpos($html, 'Test Client (Client)') !== false, 'Render client account.');
-    check(request('coach')[0] === 403, 'Reject client access to coach dashboard.');
-    $token = tokenFrom($html);
-    request('logout', ['csrf_token' => $token]);
-    [, $html] = request();
-    check(request('auth', array_replace($login, ['email' => $clientEmail, 'role' => 'client',
-        'csrf_token' => tokenFrom($html)]))[0] === 303, 'Log in client.');
 
-    foreach (['/coach.html', '/client.html', '/app/views/coach.php', '/config/local.php',
+    $legacyPassword = bin2hex(random_bytes(4));
+    $legacyHash = password_hash($legacyPassword, PASSWORD_BCRYPT, ['cost' => 10]);
+    $insert = $database->prepare(
+        "INSERT INTO users (name, email, password_hash, role) VALUES ('Legacy User', :email, :hash, 'coach')"
+    );
+    $insert->execute(['email' => $legacyEmail, 'hash' => $legacyHash]);
+    foreach (['coach', 'client'] as $legacyRole) {
+        $update = $database->prepare('UPDATE users SET role = :role WHERE email = :email');
+        $update->execute(['role' => $legacyRole, 'email' => $legacyEmail]);
+        [, $html] = request('login');
+        $oldCookie = cookieFrom($html);
+        [$status, $html] = request('login', ['email' => $legacyEmail, 'password' => $legacyPassword,
+            'csrf_token' => tokenFrom($html)]);
+        check($status === 303, 'Allow existing ' . $legacyRole . ' account without role input.');
+        check(cookieFrom($html) !== $oldCookie, 'Rotate session ID for existing accounts.');
+        [, $html] = request('success');
+        check(strpos($html, 'Login successful') !== false, 'Verify legacy bcrypt hash and short login password.');
+        $query->execute(['email' => $legacyEmail]);
+        check($query->fetch()['password_hash'] === $legacyHash, 'Preserve existing hashes.');
+        if ($legacyRole === 'coach') {
+            request('logout', ['csrf_token' => tokenFrom($html)]);
+        }
+    }
+    // Replay a logged-out session cookie without changing the active client's cookie jar.
+    $replay = curl_init($base . '/index.php?route=success');
+    curl_setopt_array($replay, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIE => 'seshbank_session=' . $loginCookie]);
+    curl_exec($replay);
+    check((int) curl_getinfo($replay, CURLINFO_HTTP_CODE) === 303, 'Logged-out session cookie cannot be replayed.');
+    curl_close($replay);
+
+    foreach (['/coach.html', '/client.html', '/app/views/success.php', '/config/local.php',
         '/database/schema.sql', '/../config/config.php'] as $privatePath) {
         curl_setopt($http, CURLOPT_URL, $base . $privatePath);
         curl_setopt($http, CURLOPT_HTTPGET, true);
@@ -128,18 +188,23 @@ try {
         check(in_array((int) curl_getinfo($http, CURLINFO_HTTP_CODE), [403, 404], true),
             'Do not serve ' . $privatePath);
     }
-    foreach (['/styles.css', '/script.js', '/images/studio.png'] as $asset) {
+    foreach (['/styles.css'] as $asset) {
         curl_setopt($http, CURLOPT_URL, $base . $asset);
         curl_exec($http);
-        check((int) curl_getinfo($http, CURLINFO_HTTP_CODE) === 200, 'Serve original asset ' . $asset);
+        check((int) curl_getinfo($http, CURLINFO_HTTP_CODE) === 200, 'Serve shared stylesheet.');
+    }
+    foreach (['/error.html', '/script.js', '/images/studio.png'] as $removedAsset) {
+        curl_setopt($http, CURLOPT_URL, $base . $removedAsset);
+        curl_exec($http);
+        check((int) curl_getinfo($http, CURLINFO_HTTP_CODE) === 404, 'Remove unused asset ' . $removedAsset);
     }
     $delete = $database->prepare('DELETE FROM users WHERE email = :email');
-    $delete->execute(['email' => $clientEmail]);
-    check(request('client')[0] === 303, 'Recheck account existence on every request.');
+    $delete->execute(['email' => $legacyEmail]);
+    check(request('success')[0] === 303, 'Recheck account existence on every success request.');
     echo "Passed {$checks} combined module/HTTP/MySQL checks.\n";
 } finally {
-    $delete = $database->prepare('DELETE FROM users WHERE email IN (:coach, :client)');
-    $delete->execute(['coach' => $coachEmail, 'client' => $clientEmail]);
+    $delete = $database->prepare('DELETE FROM users WHERE email IN (:new, :legacy)');
+    $delete->execute(['new' => $newEmail, 'legacy' => $legacyEmail]);
     curl_close($http);
     unlink($cookieFile);
 }

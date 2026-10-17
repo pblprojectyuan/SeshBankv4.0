@@ -16,17 +16,13 @@ final class AuthController
         $this->auth = $auth;
     }
 
-    public function submit(array $input): void
+    public function submit(array $input, bool $register): void
     {
-        $mode = Validation::text($input, 'mode');
-        if (!in_array($mode, ['login', 'register'], true)) {
-            throw new \InvalidArgumentException('Select login or registration.');
-        }
-        $credentials = Validation::credentials($input, $mode === 'register');
-        $id = $mode === 'register'
+        $credentials = Validation::credentials($input, $register);
+        $id = $register
             ? $this->auth->register($credentials)
             : $this->auth->login($credentials);
-        Session::login($id);
-        header('Location: index.php?route=' . $credentials['role'], true, 303);
+        Session::login($id, $register);
+        header('Location: index.php?route=success', true, 303);
     }
 }

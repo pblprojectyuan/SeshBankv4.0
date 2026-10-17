@@ -26,10 +26,10 @@ final class Session
         $_SESSION['last_activity'] = time();
     }
 
-    public static function login(int $id): void
+    public static function login(int $id, bool $registered = false): void
     {
         session_regenerate_id(true);
-        $_SESSION = ['user_id' => $id, 'last_activity' => time()];
+        $_SESSION = ['user_id' => $id, 'registered' => $registered, 'last_activity' => time()];
     }
 
     public static function logout(): void
