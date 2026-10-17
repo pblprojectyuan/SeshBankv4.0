@@ -118,11 +118,12 @@ try {
     [$status, $html] = request('logout', ['csrf_token' => $token]);
     check($status === 303 && strpos($html, 'Location: index.php?route=login') !== false, 'Logout redirects to login.');
     check(strpos($html, '<html') === false, 'Logout renders no fourth page.');
-    check(request('success')[0] === 303, 'Reject logged-out success access.');
+    [$status, $html] = request('success');
+    check($status === 303, 'Reject logged-out success access.');
+    $oldCookie = cookieFrom($html);
 
     [$status, $html] = request('login');
     check($status === 200 && strpos($html, '<h1>Login</h1>') !== false, 'Render login page.');
-    $oldCookie = cookieFrom($html);
     $token = tokenFrom($html);
     [$status, $html] = request('register', array_replace($registration, ['email' => strtoupper($newEmail),
         'csrf_token' => $token]));
