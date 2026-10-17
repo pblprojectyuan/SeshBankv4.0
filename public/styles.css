@@ -158,6 +158,14 @@ ul {
   color: var(--foreground);
 }
 
+.logout-button {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .nav a[aria-current='page'] {
   background: var(--accent);
   color: var(--accent-foreground);

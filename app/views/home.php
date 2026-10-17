@@ -17,7 +17,7 @@
   <body>
     <header class="site-header">
       <div class="site-header__inner">
-        <a href="index.html" class="brand">
+        <a href="index.php" class="brand">
           <span class="brand__mark">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>
           </span>
@@ -25,7 +25,7 @@
           <span class="brand__badge">Welcome</span>
         </a>
         <nav class="nav" aria-label="Primary">
-          <a href="index.html" aria-current="page">Home</a>
+          <a href="index.php" aria-current="page">Home</a>
           <a href="error.html">Features</a>
           <a href="error.html">Pricing</a>
         </nav>
@@ -94,78 +94,53 @@
       </section>
 
       <section>
-        <form id="login" class="card login" data-mode="login">
-          <div id="mode-dropdown" class="dropdown dropdown--heading" data-value="login" data-open="false">
-            <button type="button" class="dropdown__trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="mode-menu" aria-label="Log in or sign in">
-              <span class="dropdown__value">Log in as?</span>
-              <svg class="icon dropdown__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <ul id="mode-menu" class="dropdown__menu" role="listbox" aria-label="Log in or sign in">
-              <li role="presentation">
-                <button type="button" class="dropdown__option" role="option" aria-selected="true" data-value="login">
-                  <span>Log in as?</span>
-                  <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                </button>
-              </li>
-              <li role="presentation">
-                <button type="button" class="dropdown__option" role="option" aria-selected="false" data-value="signin">
-                  <span>Sign in as?</span>
-                  <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                </button>
-              </li>
-            </ul>
-          </div>
+        <form id="login" class="card login" data-mode="<?= escape($mode) ?>" method="post" action="index.php?route=auth">
+          <input type="hidden" name="csrf_token" value="<?= escape(\SeshBank\Security\Csrf::token()) ?>" />
+          <label for="mode" class="field-label">Welcome to SeshBank</label>
+          <select id="mode" name="mode" class="field">
+            <option value="login" <?= $mode === 'login' ? 'selected' : '' ?>>Log in</option>
+            <option value="register" <?= $mode === 'register' ? 'selected' : '' ?>>Create account</option>
+          </select>
           <p id="login-subtitle" class="login__subtitle">Access your coaching workspace</p>
+          <?php if ($error !== ''): ?>
+            <p role="alert"><?= escape($error) ?></p>
+          <?php endif; ?>
+          <noscript><style>.signin-only { display: block !important; }</style><p>For registration, fill in all fields below. For login, only email, password, and role are needed.</p></noscript>
 
           <div class="login__fields">
             <div>
-              <span class="field-label">Select role</span>
-              <div id="role-dropdown" class="dropdown" data-value="coach" data-open="false">
-                <button type="button" class="dropdown__trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="role-menu" aria-label="Select role">
-                  <span class="dropdown__value">Professional Coach</span>
-                  <svg class="icon dropdown__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <ul id="role-menu" class="dropdown__menu" role="listbox" aria-label="Select role">
-                  <li role="presentation">
-                    <button type="button" class="dropdown__option" role="option" aria-selected="true" data-value="coach">
-                      <span>Professional Coach</span>
-                      <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                    </button>
-                  </li>
-                  <li role="presentation">
-                    <button type="button" class="dropdown__option" role="option" aria-selected="false" data-value="client">
-                      <span>Client</span>
-                      <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <label for="role" class="field-label">Select role</label>
+              <select id="role" name="role" class="field">
+                <option value="coach" <?= $role === 'coach' ? 'selected' : '' ?>>Professional Coach</option>
+                <option value="client" <?= $role === 'client' ? 'selected' : '' ?>>Client</option>
+              </select>
             </div>
 
             <div class="signin-only">
               <label for="name" class="field-label">Full name</label>
-              <input id="name" type="text" class="field" placeholder="Coach Marcus Vance" />
+              <input id="name" name="name" type="text" class="field" placeholder="Your full name" autocomplete="name" maxlength="100" value="<?= escape($name) ?>" />
             </div>
 
             <div>
               <label for="email" class="field-label">Email address</label>
-              <input id="email" type="email" class="field" value="coach@seshbank.com" />
+              <input id="email" name="email" type="email" class="field" autocomplete="username" maxlength="254" required value="<?= escape($email) ?>" />
             </div>
 
             <div>
               <label for="password" class="field-label">Password</label>
               <div class="password-wrap">
-                <input id="password" type="password" class="field field--password" value="password123" />
+                <input id="password" name="password" type="password" class="field field--password" autocomplete="current-password" maxlength="72" required aria-describedby="password-help" />
                 <button id="password-toggle" type="button" class="password-toggle" aria-pressed="false" aria-label="Show password">
                   <svg class="icon icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
                   <svg class="icon icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
                 </button>
               </div>
+              <p id="password-help" class="muted">New passwords must be 12–72 bytes long (ASCII characters use one byte).</p>
             </div>
 
             <div class="signin-only">
               <label for="confirm" class="field-label">Confirm password</label>
-              <input id="confirm" type="password" class="field field--password" />
+              <input id="confirm" name="confirm_password" type="password" class="field field--password" autocomplete="new-password" maxlength="72" />
             </div>
 
             <button id="login-submit" type="submit" class="btn-primary login__submit">Log in</button>
