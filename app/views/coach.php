@@ -17,7 +17,7 @@
   <body>
     <header class="site-header">
       <div class="site-header__inner">
-        <a href="index.html" class="brand">
+        <a href="index.php" class="brand">
           <span class="brand__mark">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>
           </span>
@@ -25,10 +25,11 @@
           <span class="brand__badge">Coach Side</span>
         </a>
         <nav class="nav" aria-label="Primary">
-          <a href="coach.html" aria-current="page">Clients</a>
+          <a href="index.php?route=coach" aria-current="page">Clients</a>
           <a href="error.html">Schedule</a>
           <a href="error.html">Stats</a>
           <a href="error.html">Settings</a>
+          <?php require __DIR__ . '/logout.php'; ?>
         </nav>
       </div>
     </header>
@@ -41,7 +42,8 @@
         <div class="avatar coach-profile__avatar">
           <img src="images/avatar-marcus.png" alt="Coach Marcus Vance" />
         </div>
-        <h2 class="heading">Coach Marcus Vance</h2>
+        <h2 class="heading"><?= escape($user['name']) ?></h2>
+        <p class="muted">Demo workspace: client and session data below are sample content.</p>
         <p class="coach-profile__role">Yoga &amp; Athletic Prep Spec</p>
         <ul class="coach-profile__list">
           <li>
@@ -67,7 +69,7 @@
         </label>
         <ul class="clients__list">
           <li>
-            <a href="coach.html" class="client-row client-row--active">
+            <a href="index.php?route=coach" class="client-row client-row--active">
               <span class="client-row__info">
                 <span class="avatar"><img src="images/avatar-sasha.png" alt="" /></span>
                 <span class="client-row__text">

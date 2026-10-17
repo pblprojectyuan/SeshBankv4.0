@@ -17,7 +17,7 @@
   <body>
     <header class="site-header">
       <div class="site-header__inner">
-        <a href="index.html" class="brand">
+        <a href="index.php" class="brand">
           <span class="brand__mark">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>
           </span>
@@ -25,10 +25,11 @@
           <span class="brand__badge">User Side</span>
         </a>
         <nav class="nav" aria-label="Primary">
-          <a href="index.html">Home</a>
-          <a href="client.html" aria-current="page">Simple Mode</a>
+          <a href="index.php">Home</a>
+          <a href="index.php?route=client" aria-current="page">Simple Mode</a>
           <a href="error.html">Advanced</a>
           <a href="error.html">My History</a>
+          <?php require __DIR__ . '/logout.php'; ?>
         </nav>
       </div>
     </header>
@@ -49,8 +50,8 @@
         <div class="client-panel__head">
           <div class="avatar"><img src="images/avatar-sasha.png" alt="Sasha Gray" /></div>
           <div>
-            <h2 class="heading">Sasha Gray (Client)</h2>
-            <p>Current Active Track: Core-Flex Vinyasa</p>
+            <h2 class="heading"><?= escape($user['name']) ?> (Client)</h2>
+            <p>Demo workspace: sessions, credits, and coach details below are sample content.</p>
           </div>
         </div>
 
