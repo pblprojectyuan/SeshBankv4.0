@@ -55,6 +55,8 @@ function cookieFrom(string $response): string
 }
 
 try {
+    $columns = $database->query('SHOW COLUMNS FROM users')->fetchAll(PDO::FETCH_COLUMN);
+    check($columns === ['id', 'name', 'email', 'password_hash'], 'Keep only necessary account columns.');
     [$status, $html] = request();
     check($status === 303 && strpos($html, 'Location: index.php?route=login') !== false,
         'Root redirects to login without rendering a landing page.');
@@ -105,13 +107,12 @@ try {
             'Authenticated navigation redirects to success.');
     }
 
-    $query = $database->prepare('SELECT password_hash, role FROM users WHERE email = :email');
+    $query = $database->prepare('SELECT password_hash FROM users WHERE email = :email');
     $query->execute(['email' => $newEmail]);
     $stored = $query->fetch();
     $storedHash = $stored['password_hash'];
     check(is_string($storedHash) && $storedHash !== $password && password_verify($password, $storedHash),
         'Store only a verifiable hash in MySQL.');
-    check($stored['role'] === 'client', 'Use a fixed legacy schema value, ignoring submitted role.');
 
     check(request('logout', ['csrf_token' => 'bad'])[0] === 403, 'Reject logout CSRF.');
     check(request('success')[0] === 200, 'Invalid logout leaves authentication intact.');
@@ -154,26 +155,19 @@ try {
     $legacyPassword = bin2hex(random_bytes(4));
     $legacyHash = password_hash($legacyPassword, PASSWORD_BCRYPT, ['cost' => 10]);
     $insert = $database->prepare(
-        "INSERT INTO users (name, email, password_hash, role) VALUES ('Legacy User', :email, :hash, 'coach')"
+        "INSERT INTO users (name, email, password_hash) VALUES ('Legacy User', :email, :hash)"
     );
     $insert->execute(['email' => $legacyEmail, 'hash' => $legacyHash]);
-    foreach (['coach', 'client'] as $legacyRole) {
-        $update = $database->prepare('UPDATE users SET role = :role WHERE email = :email');
-        $update->execute(['role' => $legacyRole, 'email' => $legacyEmail]);
-        [, $html] = request('login');
-        $oldCookie = cookieFrom($html);
-        [$status, $html] = request('login', ['email' => $legacyEmail, 'password' => $legacyPassword,
-            'csrf_token' => tokenFrom($html)]);
-        check($status === 303, 'Allow existing ' . $legacyRole . ' account without role input.');
-        check(cookieFrom($html) !== $oldCookie, 'Rotate session ID for existing accounts.');
-        [, $html] = request('success');
-        check(strpos($html, 'Login successful') !== false, 'Verify legacy bcrypt hash and short login password.');
-        $query->execute(['email' => $legacyEmail]);
-        check($query->fetch()['password_hash'] === $legacyHash, 'Preserve existing hashes.');
-        if ($legacyRole === 'coach') {
-            request('logout', ['csrf_token' => tokenFrom($html)]);
-        }
-    }
+    [, $html] = request('login');
+    $oldCookie = cookieFrom($html);
+    [$status, $html] = request('login', ['email' => $legacyEmail, 'password' => $legacyPassword,
+        'csrf_token' => tokenFrom($html)]);
+    check($status === 303, 'Allow existing account without removed metadata.');
+    check(cookieFrom($html) !== $oldCookie, 'Rotate session ID for existing accounts.');
+    [, $html] = request('success');
+    check(strpos($html, 'Login successful') !== false, 'Verify legacy bcrypt hash and short login password.');
+    $query->execute(['email' => $legacyEmail]);
+    check($query->fetch()['password_hash'] === $legacyHash, 'Preserve existing hashes.');
     // Replay a logged-out session cookie without changing the active client's cookie jar.
     $replay = curl_init($base . '/index.php?route=success');
     curl_setopt_array($replay, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIE => 'seshbank_session=' . $loginCookie]);

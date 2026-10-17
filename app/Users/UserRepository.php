@@ -32,9 +32,8 @@ final class UserRepository
 
     public function create(string $name, string $email, string $hash): int
     {
-        // Satisfy the legacy NOT NULL enum without exposing roles in authentication.
         $statement = $this->database->prepare(
-            "INSERT INTO users (name, email, password_hash, role) VALUES (:name, :email, :hash, 'client')"
+            'INSERT INTO users (name, email, password_hash) VALUES (:name, :email, :hash)'
         );
         $statement->execute(['name' => $name, 'email' => $email, 'hash' => $hash]);
         return (int) $this->database->lastInsertId();

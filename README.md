@@ -12,7 +12,7 @@ The entry URL redirects to Login or Success according to the session. Successful
 
 1. Install XAMPP with PHP **7.4+** (a currently supported PHP 8.x release is recommended). Enable `pdo_mysql` in `php.ini`. Start Apache and MySQL in the XAMPP Control Panel.
 2. Place this repository in `C:/xampp/htdocs/SeshBankv4.0` (or your installation's `htdocs`).
-3. For a **new installation only**, import `database/schema.sql` in phpMyAdmin. It creates the `seshbank` database and `users` table. There are no seeded accounts or default login passwords. **Existing installations need no schema import, migration, database reset, or credential changes.**
+3. For a **new installation only**, import `database/schema.sql` in phpMyAdmin. It creates the `seshbank` database and `users` table. There are no seeded accounts or default login passwords. **Existing installations: apply the one-time migration below instead; do not reset or re-import your database.**
 4. Create a dedicated database account in phpMyAdmin, or run the following as a database administrator, replacing the placeholder password locally:
 
    ```sql
@@ -50,7 +50,20 @@ If the app reports “Service temporarily unavailable,” check the database ser
 
 ## Existing accounts and password hashing
 
-The `seshbank` database, connection settings, and users schema are unchanged. The legacy `role ENUM('coach', 'client') NOT NULL` column is retained for compatibility: new registrations write the fixed value `client`, but roles are not accepted as credentials, read for authorization, or displayed. Existing accounts of either role log in with their existing email and password. No existing users or hashes are modified.
+The database name (`seshbank`) and connection settings remain unchanged. The only table needed is `users`, with four columns:
+
+- `id`: account identifier and primary key.
+- `name`: name shown on Success.
+- `email`: login identifier, with the existing case-insensitive unique index.
+- `password_hash`: PHP password hash, never a plaintext password.
+
+The unused `role` and `created_at` fields are removed. For an **existing installation using the previous schema**:
+
+1. Back up the database and stop the app while migrating.
+2. In phpMyAdmin, select your existing `seshbank` database and import `database/migrations/001_auth_only.sql` **once**, using a database administrator with `ALTER` permission.
+3. Start the updated app. No credential or connection changes are needed.
+
+The migration deliberately discards role and creation-time metadata only. It does not delete users or change IDs, names, emails, password hashes, or the unique email index. Existing accounts of either former role retain their login credentials. New installations already have the minimal schema and must **not** run this migration. Re-importing `schema.sql` does not migrate existing tables. Apply the migration before using the updated registration code; the old required role column otherwise blocks new registrations. Do not grant `ALTER` to the normal application account.
 
 Only passwords are hashed with PHP's `password_hash($password, PASSWORD_DEFAULT)` and verified with `password_verify`; names and email addresses remain ordinary identifiers. Existing PHP password hashes remain compatible. Passwords are never displayed, logged, or stored in plaintext. Registration still requires 12–72 bytes and matching confirmation; login retains compatibility with shorter existing passwords. Both reject empty passwords, null bytes, and passwords over 72 bytes to avoid bcrypt truncation. Hashes remain in `users.password_hash VARCHAR(255)`.
 
@@ -86,7 +99,9 @@ In another terminal, run:
 DB_NAME=seshbank_test_auth TEST_DATABASE_NAME=seshbank_test_auth TEST_BASE_URL=http://localhost:3000 TEST_ALLOW_DATABASE_MUTATION=1 php tests/integration.php
 ```
 
-The integration test requires `pdo_mysql` and PHP's cURL extension. It refuses to run unless `TEST_DATABASE_NAME` starts with `seshbank_test_` and matches the configured database name. It creates randomly named accounts, exercises registration, stored hashes, login, legacy account compatibility, invalid input/credentials, duplicates, CSRF, guards, confirmation integrity, session rotation, and logout, then removes only its test accounts. Its disposable-database user needs `SELECT`, `INSERT`, `UPDATE` (to test both legacy roles), and `DELETE` (cleanup); do not add these extra permissions to the normal application account.
+The integration test requires `pdo_mysql` and PHP's cURL extension. It refuses to run unless `TEST_DATABASE_NAME` starts with `seshbank_test_` and matches the configured database name. It checks the four-column schema, creates randomly named accounts, exercises registration, stored hashes, login, legacy hash compatibility, invalid input/credentials, duplicates, CSRF, guards, confirmation integrity, session rotation, and logout, then removes only its test accounts. Its disposable-database user needs `SELECT`, `INSERT`, and `DELETE` (cleanup); do not add cleanup permissions to the normal application account.
+
+To check an upgrade, initialize a separate disposable `seshbank_test_*` database using the previous users schema, seed test accounts, and back up their IDs, names, emails, and hashes. Apply `database/migrations/001_auth_only.sql` to that disposable database and verify these values and the unique index remain unchanged; then run the integration suite against it. Never test migrations on your live database.
 
 On Windows, set the variables in **both terminals** using PowerShell's `$env:VARIABLE = 'value'` syntax. For example, `$env:DB_NAME = 'seshbank_test_auth'`. A test skip message means the integration suite did not run. PHP syntax checking is supported with `php -l path/to/file.php`; check every PHP file before committing.
 
